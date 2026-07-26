@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>두더지 잡기 - 미니 게임</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: linear-gradient(160deg, #1f2937, #0f172a);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    color: #f8fafc;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+  .page {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+  }
+
+  /* 광고 영역 (상단) - AdSense 등 광고 코드를 이 안에 넣으세요 */
+  .ad-slot {
+    width: 100%;
+    max-width: 480px;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.06);
+    border: 1px dashed rgba(255,255,255,0.25);
+    border-radius: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    margin: 6px 0;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  h1 {
+    font-size: 22px;
+    margin: 8px 0 0;
+    text-align: center;
+  }
+  p.desc {
+    font-size: 13px;
+    color: #94a3b8;
+    text-align: center;
+    margin: 0 0 4px;
+  }
+
+  .hud {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 0 4px;
+  }
+  .hud span.label { color: #94a3b8; font-weight: 400; font-size: 12px; display: block; }
+
+  .timer-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .timer-bar-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #34d399, #fbbf24, #f87171);
+    transition: width 0.1s linear;
+  }
+
+  .board {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .hole {
+    position: relative;
+    background: radial-gradient(circle at 50% 40%, #3f2d1e, #1c140c 70%);
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: inset 0 6px 10px rgba(0,0,0,0.6);
+  }
+  .mole {
+    position: absolute;
+    left: 50%;
+    bottom: -100%;
+    transform: translate(-50%, 0);
+    width: 70%;
+    height: 70%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    background: radial-gradient(circle at 35% 30%, #a8763e, #6b4423);
+    transition: bottom 0.12s ease-out;
+    cursor: pointer;
+  }
+  .hole.up .mole { bottom: 10%; }
+  .mole.hit { background: radial-gradient(circle at 35% 30%, #fbbf24, #f59e0b); }
+
+  .btn {
+    appearance: none;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    background: linear-gradient(180deg, #34d399, #10b981);
+    box-shadow: 0 4px 0 #059669;
+    cursor: pointer;
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #059669; }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  .card {
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 340px;
+    width: 100%;
+  }
+  .card h2 { margin: 0 0 6px; font-size: 24px; }
+  .card .score-big { font-size: 40px; font-weight: 800; color: #34d399; margin: 10px 0; }
+  .card .best { font-size: 13px; color: #94a3b8; margin-bottom: 18px; }
+
+  footer {
+    margin-top: auto;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    padding: 10px 0;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 상단 광고 자리 -->
+  <div class="ad-slot" id="ad-top">광고 영역 (상단)</div>
+
+  <div class="wrap">
+    <h1>🔨 두더지 잡기</h1>
+    <p class="desc">튀어나오는 두더지를 빠르게 탭하세요! 제한시간 45초</p>
+
+    <div class="hud">
+      <div><span class="label">점수</span><span id="score">0</span></div>
+      <div style="text-align:right"><span class="label">최고점수</span><span id="best">0</span></div>
+    </div>
+
+    <div class="timer-bar"><div class="timer-bar-fill" id="timerFill"></div></div>
+
+    <div class="board" id="board"></div>
+
+    <button class="btn" id="startBtn">게임 시작</button>
+  </div>
+
+  <!-- 하단 광고 자리 -->
+  <div class="ad-slot" id="ad-bottom">광고 영역 (하단)</div>
+
+  <footer>한 판 약 45초 · 모바일 터치 지원</footer>
+</div>
+
+<!-- 결과 화면 -->
+<div class="overlay hidden" id="resultOverlay">
+  <div class="card">
+    <h2>게임 종료!</h2>
+    <div class="score-big" id="finalScore">0</div>
+    <div class="best" id="finalBest">최고 점수: 0</div>
+    <button class="btn" id="retryBtn">다시 하기</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const HOLE_COUNT = 9;
+  const GAME_SECONDS = 45;
+  const STORAGE_KEY = "mole_game_best_score";
+
+  const board = document.getElementById("board");
+  const scoreEl = document.getElementById("score");
+  const bestEl = document.getElementById("best");
+  const timerFill = document.getElementById("timerFill");
+  const startBtn = document.getElementById("startBtn");
+  const retryBtn = document.getElementById("retryBtn");
+  const resultOverlay = document.getElementById("resultOverlay");
+  const finalScoreEl = document.getElementById("finalScore");
+  const finalBestEl = document.getElementById("finalBest");
+
+  let holes = [];
+  let score = 0;
+  let best = Number(localStorage.getItem(STORAGE_KEY) || 0);
+  let timeLeft = GAME_SECONDS;
+  let playing = false;
+  let spawnTimeout = null;
+  let tickInterval = null;
+  let combo = 0;
+
+  bestEl.textContent = best;
+
+  // 보드 생성
+  for (let i = 0; i < HOLE_COUNT; i++) {
+    const hole = document.createElement("div");
+    hole.className = "hole";
+    const mole = document.createElement("div");
+    mole.className = "mole";
+    mole.textContent = "🐹";
+    hole.appendChild(mole);
+    board.appendChild(hole);
+    holes.push({ hole, mole, up: false, upTimeout: null });
+
+    const hit = (e) => {
+      e.preventDefault();
+      if (!playing || !holes[i].up) return;
+      holes[i].up = false;
+      hole.classList.remove("up");
+      clearTimeout(holes[i].upTimeout);
+      combo++;
+      const gained = 1 + Math.floor(combo / 5);
+      score += gained;
+      scoreEl.textContent = score;
+      mole.classList.add("hit");
+      setTimeout(() => mole.classList.remove("hit"), 150);
+    };
+    mole.addEventListener("touchstart", hit, { passive: false });
+    mole.addEventListener("mousedown", hit);
+  }
+
+  function randomHoleIndex(excludeSet) {
+    let idx;
+    do {
+      idx = Math.floor(Math.random() * HOLE_COUNT);
+    } while (excludeSet.has(idx) && excludeSet.size < HOLE_COUNT);
+    return idx;
+  }
+
+  function spawnMole() {
+    if (!playing) return;
+    const activeSet = new Set(holes.map((h, i) => (h.up ? i : -1)).filter(i => i >= 0));
+    const idx = randomHoleIndex(activeSet);
+    const entry = holes[idx];
+
+    if (!entry.up) {
+      entry.up = true;
+      entry.hole.classList.add("up");
+      const progress = 1 - timeLeft / GAME_SECONDS;
+      const upDuration = Math.max(450, 1000 - progress * 550);
+
+      entry.upTimeout = setTimeout(() => {
+        if (entry.up) {
+          entry.up = false;
+          entry.hole.classList.remove("up");
+          combo = 0;
+        }
+      }, upDuration);
+    }
+
+    const progress = 1 - timeLeft / GAME_SECONDS;
+    const nextSpawn = Math.max(280, 750 - progress * 400);
+    spawnTimeout = setTimeout(spawnMole, nextSpawn);
+  }
+
+  function startGame() {
+    playing = true;
+    score = 0;
+    combo = 0;
+    timeLeft = GAME_SECONDS;
+    scoreEl.textContent = "0";
+    timerFill.style.width = "100%";
+    startBtn.style.display = "none";
+    resultOverlay.classList.add("hidden");
+
+    holes.forEach(h => {
+      h.up = false;
+      h.hole.classList.remove("up");
+      clearTimeout(h.upTimeout);
+    });
+
+    spawnMole();
+
+    tickInterval = setInterval(() => {
+      timeLeft -= 0.1;
+      timerFill.style.width = Math.max(0, (timeLeft / GAME_SECONDS) * 100) + "%";
+      if (timeLeft <= 0) endGame();
+    }, 100);
+  }
+
+  function endGame() {
+    playing = false;
+    clearTimeout(spawnTimeout);
+    clearInterval(tickInterval);
+    holes.forEach(h => {
+      h.up = false;
+      h.hole.classList.remove("up");
+      clearTimeout(h.upTimeout);
+    });
+
+    if (score > best) {
+      best = score;
+      localStorage.setItem(STORAGE_KEY, String(best));
+    }
+    bestEl.textContent = best;
+    finalScoreEl.textContent = score;
+    finalBestEl.textContent = "최고 점수: " + best;
+    resultOverlay.classList.remove("hidden");
+    startBtn.style.display = "inline-block";
+    startBtn.textContent = "게임 시작";
+  }
+
+  startBtn.addEventListener("click", startGame);
+  retryBtn.addEventListener("click", startGame);
+})();
+</script>
+</body>
+</html>
