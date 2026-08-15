@@ -1,0 +1,15 @@
+{
+  "name": "naver-booking-watcher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "네이버 예약 빈자리 알림 도구 (자동 예약 아님, 알림 전용)",
+  "scripts": {
+    "check": "node src/checkAvailability.mjs",
+    "debug": "node src/debug.mjs"
+  },
+  "dependencies": {
+    "nodemailer": "^9.0.5",
+    "playwright": "^1.46.0"
+  }
+}
