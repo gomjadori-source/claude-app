@@ -113,7 +113,23 @@ def main():
     try:
         targets = sheet.load_targets()
     except Exception as e:
-        notify.send_message(f"❌ 구글 시트를 읽지 못했습니다.\n{type(e).__name__}: {e}")
+        # 공개 저장소 로그에는 예외 타입과 힌트만 남기고, 상세 메시지는 텔레그램으로만 보낸다
+        hints = {
+            "KeyError": "Secret이 등록되지 않았거나 이름 오타",
+            "JSONDecodeError": "GOOGLE_CREDENTIALS에 JSON 파일 내용 전체가 안 들어감",
+            "MalformedError": "GOOGLE_CREDENTIALS 값이 서비스 계정 키 형식이 아님",
+            "SpreadsheetNotFound": "SHEET_URL이 틀렸거나 서비스 계정에 시트가 공유되지 않음",
+            "NoValidUrlKeyFound": "SHEET_URL이 구글 시트 주소 형식이 아님",
+            "PermissionError": "서비스 계정에 시트가 공유되지 않음",
+            "APIError": "구글 API 거부 — 시트 공유 여부와 Sheets API 활성화 확인",
+        }
+        etype = type(e).__name__
+        print(f"[오류] 구글 시트 읽기 실패: {etype} — {hints.get(etype, '상세 내용은 텔레그램 참고')}")
+        delivered = notify.send_message(
+            f"❌ 구글 시트를 읽지 못했습니다.\n"
+            f"<b>{etype}</b>: {e}\n\n"
+            f"💡 {hints.get(etype, 'watcher/README.md의 문제 해결 표를 확인해주세요')}")
+        print(f"[오류] 텔레그램 통지 {'전송됨' if delivered else '전송 실패'}")
         sys.exit(1)
 
     print(f"[시작] 감시 대상 {len(targets)}개")

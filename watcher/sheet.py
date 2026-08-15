@@ -7,26 +7,76 @@
 """
 import json
 import os
-from datetime import datetime, timedelta
+import re
+import urllib.parse
+from datetime import date, datetime, timedelta, timezone
 
 import gspread
 from google.oauth2.service_account import Credentials
 
+KST = timezone(timedelta(hours=9))
+
+
+def _today() -> date:
+    return datetime.now(KST).date()
+
+
+def parse_one_date(raw: str) -> date:
+    """사람이 적을 법한 날짜 표기를 관대하게 해석한다.
+
+    허용 예: 2026-08-20 / 2026.8.20 / 2026. 8. 20. / 2026/08/20 /
+             8-20 / 8/20 / 8.20 / 8월 20일 / 2026년 8월 20일
+    연도가 없으면 오늘(KST) 기준으로 아직 지나지 않은 가장 가까운 해로 본다.
+    """
+    s = re.sub(r"[년월]", "-", str(raw))
+    s = s.replace("일", "")
+    s = re.sub(r"[./]", "-", s)
+    s = re.sub(r"\s+", "", s).strip("-")
+    parts = [p for p in s.split("-") if p]
+    if len(parts) == 3:
+        y, m, d = (int(p) for p in parts)
+    elif len(parts) == 2:
+        m, d = (int(p) for p in parts)
+        y = _today().year
+        if date(y, m, d) < _today():
+            y += 1
+    else:
+        raise ValueError(raw)
+    if y < 100:
+        y += 2000
+    return date(y, m, d)
+
 
 def parse_dates(raw: str) -> list[str]:
-    dates: set[str] = set()
+    """쉼표 구분 + '~' 범위 조합을 날짜 목록으로. 이미 지난 날짜는 뺀다."""
+    dates: set[date] = set()
     for rule in [r.strip() for r in str(raw).split(",") if r.strip()]:
         if "~" in rule:
-            start_s, end_s = [s.strip() for s in rule.split("~", 1)]
-            start = datetime.strptime(start_s, "%Y-%m-%d")
-            end = datetime.strptime(end_s, "%Y-%m-%d")
+            start_s, end_s = rule.split("~", 1)
+            start, end = parse_one_date(start_s), parse_one_date(end_s)
             while start <= end:
-                dates.add(start.strftime("%Y-%m-%d"))
+                dates.add(start)
                 start += timedelta(days=1)
         else:
-            datetime.strptime(rule, "%Y-%m-%d")  # 형식 검증
-            dates.add(rule)
-    return sorted(dates)
+            dates.add(parse_one_date(rule))
+    return sorted(d.strftime("%Y-%m-%d") for d in dates if d >= _today())
+
+
+def parse_one_time(raw: str):
+    """'18:00' / '18시' / '18시 30분' / '오후 6시' / '18' 을 time으로 해석."""
+    s = re.sub(r"\s+", "", str(raw))
+    pm = s.startswith("오후")
+    s = s.removeprefix("오전").removeprefix("오후")
+    s = s.replace("시", ":").replace("분", "")
+    s = s.rstrip(":")
+    if ":" in s:
+        h, m = s.split(":", 1)
+    else:
+        h, m = s, "0"
+    h = int(h)
+    if pm and h < 12:
+        h += 12
+    return datetime.strptime(f"{h:02d}:{int(m):02d}", "%H:%M").time()
 
 
 def time_matches(time_str: str, rules: list[str]) -> bool:
@@ -38,14 +88,28 @@ def time_matches(time_str: str, rules: list[str]) -> bool:
         return False
     for rule in rules:
         if "~" in rule:
-            start_s, end_s = [s.strip() for s in rule.split("~", 1)]
-            start = datetime.strptime(start_s, "%H:%M").time()
-            end = datetime.strptime(end_s, "%H:%M").time()
-            if start <= t <= end:
+            start_s, end_s = rule.split("~", 1)
+            if parse_one_time(start_s) <= t <= parse_one_time(end_s):
                 return True
-        elif datetime.strptime(rule.strip(), "%H:%M").time() == t:
+        elif parse_one_time(rule) == t:
             return True
     return False
+
+
+def normalize_url(url: str) -> str:
+    """네이버 지도에서 복사한 주소 안에 숨어 있는 예약 페이지 주소를 추출한다.
+
+    지도 URL의 placePath 파라미터에는 bookingRedirectUrl이 여러 번 인코딩되어
+    들어 있다. 몇 단계든 디코딩한 뒤 booking.naver.com 주소가 나오면 그걸 쓴다.
+    """
+    decoded = url
+    for _ in range(5):
+        step = urllib.parse.unquote(decoded)
+        if step == decoded:
+            break
+        decoded = step
+    m = re.search(r"https://(?:m\.)?booking\.naver\.com/booking/\d+/bizes/\d+", decoded)
+    return m.group(0) if m else url
 
 
 def load_targets() -> list[dict]:
@@ -60,7 +124,7 @@ def load_targets() -> list[dict]:
         if str(row.get("상태", "")).strip().upper() != "O":
             continue
         name = str(row.get("가게명", "")).strip() or f"이름없는 타겟(행 {i + 2})"
-        url = str(row.get("URL", "")).strip()
+        url = normalize_url(str(row.get("URL", "")).strip())
         if not url:
             continue
         try:
@@ -69,7 +133,21 @@ def load_targets() -> list[dict]:
             print(f"[시트] {mask(name)}: 날짜 형식 오류 → 이 행은 건너뜀 (예: 2026-08-20)")
             continue
         if not dates:
+            print(f"[시트] {mask(name)}: 유효한 날짜 없음(모두 지난 날짜?) → 이 행은 건너뜀")
             continue
+
+        times = []
+        # 시간 범위는 '~' 외에 '-'(하이픈)로 적어도 알아듣는다
+        for t in str(row.get("시간", "")).replace("-", "~").split(","):
+            if not t.strip():
+                continue
+            try:
+                for part in t.split("~"):
+                    parse_one_time(part)
+                times.append(t.strip())
+            except ValueError:
+                print(f"[시트] {mask(name)}: 시간 형식 오류('{'*' * len(t.strip())}') → 이 규칙만 무시")
+
         try:
             qty = int(str(row.get("필요인원", "")).strip() or 1)
         except ValueError:
@@ -78,7 +156,7 @@ def load_targets() -> list[dict]:
             "name": name,
             "url": url,
             "dates": dates,
-            "times": [t.strip() for t in str(row.get("시간", "")).split(",") if t.strip()],
+            "times": times,
             "qty": max(qty, 1),
         })
     return targets
