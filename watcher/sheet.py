@@ -120,7 +120,8 @@ def load_targets() -> list[dict]:
             continue
 
         times = []
-        for t in str(row.get("시간", "")).split(","):
+        # 시간 범위는 '~' 외에 '-'(하이픈)로 적어도 알아듣는다
+        for t in str(row.get("시간", "")).replace("-", "~").split(","):
             if not t.strip():
                 continue
             try:
