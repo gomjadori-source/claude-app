@@ -8,6 +8,7 @@
 import json
 import os
 import re
+import urllib.parse
 from datetime import date, datetime, timedelta, timezone
 
 import gspread
@@ -95,6 +96,22 @@ def time_matches(time_str: str, rules: list[str]) -> bool:
     return False
 
 
+def normalize_url(url: str) -> str:
+    """네이버 지도에서 복사한 주소 안에 숨어 있는 예약 페이지 주소를 추출한다.
+
+    지도 URL의 placePath 파라미터에는 bookingRedirectUrl이 여러 번 인코딩되어
+    들어 있다. 몇 단계든 디코딩한 뒤 booking.naver.com 주소가 나오면 그걸 쓴다.
+    """
+    decoded = url
+    for _ in range(5):
+        step = urllib.parse.unquote(decoded)
+        if step == decoded:
+            break
+        decoded = step
+    m = re.search(r"https://(?:m\.)?booking\.naver\.com/booking/\d+/bizes/\d+", decoded)
+    return m.group(0) if m else url
+
+
 def load_targets() -> list[dict]:
     creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
     creds = Credentials.from_service_account_info(
@@ -107,7 +124,7 @@ def load_targets() -> list[dict]:
         if str(row.get("상태", "")).strip().upper() != "O":
             continue
         name = str(row.get("가게명", "")).strip() or f"이름없는 타겟(행 {i + 2})"
-        url = str(row.get("URL", "")).strip()
+        url = normalize_url(str(row.get("URL", "")).strip())
         if not url:
             continue
         try:
