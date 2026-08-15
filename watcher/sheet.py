@@ -113,7 +113,13 @@ def normalize_url(url: str) -> str:
 
 
 def load_targets() -> list[dict]:
-    creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+    # 나스/도커에서는 JSON을 환경변수에 넣는 대신 파일로 마운트하는 게 편하다.
+    cred_file = os.environ.get("GOOGLE_CREDENTIALS_FILE")
+    if cred_file:
+        with open(cred_file, encoding="utf-8") as f:
+            creds_info = json.load(f)
+    else:
+        creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
     creds = Credentials.from_service_account_info(
         creds_info, scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )

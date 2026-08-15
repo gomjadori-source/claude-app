@@ -5,6 +5,8 @@
 - 같은 타겟이 3회 연속 읽기 실패하면 경고 + 스크린샷을 한 번만 보낸다.
 - 파서가 응답 구조를 해석 못 하면 가로챈 JSON을 텔레그램으로 보내 보정할 수 있게 한다.
 """
+import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -150,4 +152,21 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # INTERVAL_SECONDS가 있으면(나스/도커 상주 모드) 그 간격으로 무한 반복하고,
+    # 없으면(GitHub Actions 등) 1회만 실행한다.
+    interval = os.environ.get("INTERVAL_SECONDS")
+    if interval:
+        interval = int(interval)
+        print(f"[상주 모드] {interval}초 간격으로 반복 실행합니다.")
+        while True:
+            started = time.time()
+            try:
+                main()
+            except (Exception, SystemExit) as e:
+                # 한 회차 실패가 루프를 죽이지 않도록 삼킨다.
+                print(f"[루프] 이번 회차 오류: {type(e).__name__}: {e}")
+            # 매번 정확히 같은 시각에 두드리지 않도록 0~2분 지터를 준다.
+            sleep_for = max(interval - (time.time() - started), 60) + random.uniform(0, 120)
+            time.sleep(sleep_for)
+    else:
+        main()
