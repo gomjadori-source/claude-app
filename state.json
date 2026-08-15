@@ -1,4 +1,11 @@
 {
  "open": {},
- "targets": {}
+ "targets": {
+  "717198284bcc76d1": {
+   "debug_sent": false,
+   "fail": 1,
+   "fail_alerted": true,
+   "last_ok": 0
+  }
+ }
 }
