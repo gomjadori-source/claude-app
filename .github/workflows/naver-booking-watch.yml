@@ -2,7 +2,10 @@ name: Naver Booking Watcher
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    # KST 09:00~23:50 → 10분마다 (UTC 00~14시)
+    - cron: '*/10 0-14 * * *'
+    # KST 00:00~08:00 → 1시간마다 (UTC 15~23시)
+    - cron: '0 15-23 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -15,33 +18,43 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: naver-booking-watcher
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: 20
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: watcher/requirements.txt
 
       - name: Install dependencies
-        run: npm install
+        run: pip install -r watcher/requirements.txt
 
-      - name: Install Chromium for Playwright
-        run: npx playwright install --with-deps chromium
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('watcher/requirements.txt') }}
 
-      - name: Check availability
-        run: npm run check
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run watcher
         env:
-          SMTP_USER: ${{ secrets.NAVER_WATCHER_SMTP_USER }}
-          SMTP_PASS: ${{ secrets.NAVER_WATCHER_SMTP_PASS }}
-          NOTIFY_EMAIL: ${{ secrets.NAVER_WATCHER_NOTIFY_EMAIL }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SHEET_URL: ${{ secrets.SHEET_URL }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python watcher/main.py
 
-      - name: Commit updated state
+      - name: Commit state
         run: |
-          git config user.name "naver-booking-watcher-bot"
+          git config user.name "watcher-bot"
           git config user.email "actions@users.noreply.github.com"
           git add state.json
-          git diff --staged --quiet || git commit -m "chore: 알림 상태 업데이트"
-          git push
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update watcher state [skip ci]"
+            git pull --rebase origin ${{ github.ref_name }}
+            git push
+          fi
