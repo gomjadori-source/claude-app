@@ -1,15 +1,13 @@
 {
  "open": {
-  "9af6e5db1c603bdb": {
-   "854ba3660d23dc34": 1787028704.6209471
-  }
+  "9af6e5db1c603bdb": {}
  },
  "targets": {
   "59f9875a1991409c": {
    "debug_sent": false,
    "fail": 0,
    "fail_alerted": false,
-   "last_ok": 1787028704.6209497
+   "last_ok": 1787031078.5037735
   },
   "717198284bcc76d1": {
    "debug_sent": false,
