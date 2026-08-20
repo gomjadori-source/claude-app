@@ -9,10 +9,13 @@
 가로챈 JSON 원본을 호출 측에 넘겨 텔레그램으로 전달해 파서를 보정할 수 있게 한다.
 """
 import json
+import os
 import re
 import random
 import time
 from dataclasses import dataclass, field
+
+DEBUG = bool(os.environ.get("DEBUG_CAPTURE"))
 
 from playwright.sync_api import Browser
 
@@ -102,7 +105,9 @@ def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
             if "json" not in ctype:
                 return
             body = response.text()
-            if body and len(body) < 2_000_000 and _looks_relevant(response.url, body):
+            # 진단 모드에서는 관련성 필터를 끄고 모든 JSON을 담아, 실제 스케줄
+            # 엔드포인트가 필터에 걸러지고 있는 건 아닌지까지 확인할 수 있게 한다.
+            if body and len(body) < 2_000_000 and (DEBUG or _looks_relevant(response.url, body)):
                 captured.append((response.url, body))
         except Exception:
             pass
@@ -141,7 +146,7 @@ def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
         result.ok, result.method = True, "json"
         result.slots = sorted(seen.items())
         # 진단용: 성공했을 때도 원본을 실어 보내 파서를 실제 구조에 맞게 보정한다.
-        result.captured_json = [(u, b[:15000]) for u, b in captured[:3]]
+        result.captured_json = [(u, b[:15000]) for u, b in captured[:8]]
         page.close()
         return result
 
@@ -165,6 +170,9 @@ def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
             uniq = sorted({f"{int(t.split(':')[0]):02d}:{t.split(':')[1]}" for t in dom_times})
             result.ok, result.method = True, "dom"
             result.slots = [(t, None) for t in uniq]
+            # 진단용: DOM 폴백으로 읽었더라도 가로챈 JSON을 실어 보내 실제
+            # 스케줄 엔드포인트를 찾아 파서를 JSON 기반으로 바로잡을 수 있게 한다.
+            result.captured_json = [(u, b[:15000]) for u, b in captured[:8]]
             page.close()
             return result
     except Exception:
