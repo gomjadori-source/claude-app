@@ -79,7 +79,8 @@ def check_target(browser, target, st) -> list[dict]:
             notify.send_message(
                 f"⚠️ <b>[{target['name']}]</b> 자리 정보를 읽지 못하고 있어요.\n"
                 f"연속 {entry['fail']}회 실패 (예: {date_str})\n"
-                f"URL이 맞는지 확인해주세요. 복구되면 자동으로 다시 감시합니다.",
+                f"사유: {result.error}\n"
+                f"복구되면 자동으로 다시 감시합니다.",
                 button_url=target["url"], button_text="문제 페이지 열어보기")
             if result.screenshot:
                 notify.send_photo(result.screenshot, f"[{target['name']}] 실패 시점 화면")

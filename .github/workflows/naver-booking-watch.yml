@@ -46,7 +46,6 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SHEET_URL: ${{ secrets.SHEET_URL }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          DEBUG_CAPTURE: "1"   # 진단용: 성공 응답 원본을 텔레그램으로 1회 전송 (이후 제거 예정)
         run: python watcher/main.py
 
       - name: Commit state
