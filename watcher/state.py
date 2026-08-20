@@ -10,10 +10,13 @@
 """
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
-STATE_PATH = Path(__file__).resolve().parent.parent / "state.json"
+# 나스/도커에서는 WATCHER_STATE_PATH로 마운트된 볼륨을 가리켜 상태를 영속화한다.
+STATE_PATH = Path(os.environ.get("WATCHER_STATE_PATH")
+                  or Path(__file__).resolve().parent.parent / "state.json")
 OPEN_TTL = 7 * 24 * 3600  # 지난 날짜 기록 자동 정리용
 
 

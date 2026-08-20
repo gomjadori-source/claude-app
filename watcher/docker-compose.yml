@@ -1,0 +1,21 @@
+# 시놀로지 Container Manager의 "프로젝트" 기능으로 이 파일을 열면
+# 이미지를 빌드하고 상주 컨테이너로 실행한다. (SSH 불필요)
+services:
+  watcher:
+    build: .
+    image: naver-watcher:latest
+    container_name: naver-watcher
+    restart: unless-stopped
+    environment:
+      # KST 08~24시 감시 의도로 2시간(7200초) 간격. 필요시 숫자만 바꾸면 됨.
+      INTERVAL_SECONDS: "7200"
+      TELEGRAM_TOKEN: "${TELEGRAM_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      SHEET_URL: "${SHEET_URL}"
+      # 서비스 계정 JSON은 아래 data 폴더에 파일로 두고 경로로 참조
+      GOOGLE_CREDENTIALS_FILE: "/data/service-account.json"
+    volumes:
+      # 왼쪽(나스 경로)에 state.json과 service-account.json이 저장/참조된다.
+      - ./data:/data
+    # 2GB RAM 나스 보호용 상한 (크로미움이 잠깐 뜰 때만 사용)
+    mem_limit: 1200m

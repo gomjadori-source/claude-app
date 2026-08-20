@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+.env
+watcher/data/
+service-account.json

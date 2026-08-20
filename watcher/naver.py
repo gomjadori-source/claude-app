@@ -1,18 +1,20 @@
 """네이버 예약 페이지에서 특정 날짜의 예약 가능 시간대를 읽어온다.
 
-전략:
-1) 페이지가 백그라운드로 받아오는 JSON 응답을 가로채서 시간대/가능여부/잔여수를 추출 (주 방식)
-2) 실패하면 화면(DOM)에서 HH:MM 패턴의 활성 버튼을 찾는 폴백
+방식: 페이지가 백그라운드로 받아오는 JSON 응답을 가로채 시간대/가능여부/잔여수를 추출한다.
+신뢰할 수 있는 JSON을 못 읽으면 '자리 없음'이 아니라 '읽기 실패'로 처리한다.
+(과거엔 화면 텍스트에서 HH:MM을 긁는 DOM 폴백이 있었으나, 네이버 CAPTCHA 화면의
+글자를 실제 빈자리로 오인해 가짜 알림을 보냈기에 제거했다.)
 
-주의: 이 코드를 작성한 환경에서는 naver.com 접속이 차단되어 있어 실제 응답 구조를
-검증하지 못했다. 파서는 흔한 키 이름을 휴리스틱으로 탐색하며, 둘 다 실패하면
-가로챈 JSON 원본을 호출 측에 넘겨 텔레그램으로 전달해 파서를 보정할 수 있게 한다.
+ncpt.naver.com/wcpt 호출이 감지되면 네이버 봇 차단(CAPTCHA)에 막힌 것으로 본다.
 """
 import json
+import os
 import re
 import random
 import time
 from dataclasses import dataclass, field
+
+DEBUG = bool(os.environ.get("DEBUG_CAPTURE"))
 
 from playwright.sync_api import Browser
 
@@ -89,6 +91,7 @@ def _looks_relevant(url: str, body: str) -> bool:
 def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
     result = CheckResult()
     captured: list[tuple[str, str]] = []
+    flags = {"captcha": False}
 
     page = browser.new_page(
         user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
@@ -98,11 +101,16 @@ def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
 
     def on_response(response):
         try:
+            # 네이버 봇 차단(CAPTCHA) 엔드포인트가 호출되면 차단 상태로 표시
+            if "ncpt.naver.com" in response.url or "/wcpt/" in response.url:
+                flags["captcha"] = True
             ctype = response.headers.get("content-type", "")
             if "json" not in ctype:
                 return
             body = response.text()
-            if body and len(body) < 2_000_000 and _looks_relevant(response.url, body):
+            # 진단 모드에서는 관련성 필터를 끄고 모든 JSON을 담아, 실제 스케줄
+            # 엔드포인트가 필터에 걸러지고 있는 건 아닌지까지 확인할 수 있게 한다.
+            if body and len(body) < 2_000_000 and (DEBUG or _looks_relevant(response.url, body)):
                 captured.append((response.url, body))
         except Exception:
             pass
@@ -140,36 +148,18 @@ def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
                 seen[t] = stock
         result.ok, result.method = True, "json"
         result.slots = sorted(seen.items())
+        # 진단용: 성공했을 때도 원본을 실어 보내 파서를 실제 구조에 맞게 보정한다.
+        result.captured_json = [(u, b[:15000]) for u, b in captured[:8]]
         page.close()
         return result
 
-    # 2차 폴백: DOM에서 활성화된 시간 버튼 탐색
-    try:
-        dom_times = page.evaluate(
-            """() => {
-                const out = [];
-                for (const el of document.querySelectorAll('button, a, [role="button"], li')) {
-                    const m = (el.innerText || '').match(/\\b\\d{1,2}:\\d{2}\\b/);
-                    if (!m) continue;
-                    const cls = el.className || '';
-                    const disabled = el.disabled || el.getAttribute('aria-disabled') === 'true'
-                        || /disabled|soldout|dimmed|unselect/i.test(String(cls));
-                    if (!disabled) out.push(m[0]);
-                }
-                return out;
-            }"""
-        )
-        if dom_times:
-            uniq = sorted({f"{int(t.split(':')[0]):02d}:{t.split(':')[1]}" for t in dom_times})
-            result.ok, result.method = True, "dom"
-            result.slots = [(t, None) for t in uniq]
-            page.close()
-            return result
-    except Exception:
-        pass
-
-    # 둘 다 실패: 디버깅 재료를 챙겨서 반환
-    result.error = "시간표를 JSON에서도 화면에서도 찾지 못함"
+    # JSON에서 슬롯을 못 찾음. 예전엔 화면(DOM)에서 HH:MM을 긁는 폴백이 있었으나,
+    # 네이버 CAPTCHA 화면의 텍스트를 실제 빈자리로 오인해 '가짜 알림'을 보냈기에 제거했다.
+    # 신뢰할 수 있는 JSON을 못 읽었으면 '자리 없음'이 아니라 '읽기 실패'로 처리한다.
+    if flags["captcha"]:
+        result.error = "네이버 봇 차단(CAPTCHA) 화면이 떴습니다 — 자동 접근이 막혔습니다"
+    else:
+        result.error = "예약 스케줄 JSON을 찾지 못했습니다 (페이지 구조 변경 가능성)"
     result.captured_json = [(u, b[:15000]) for u, b in captured[:5]]
     try:
         result.screenshot = page.screenshot(full_page=False)

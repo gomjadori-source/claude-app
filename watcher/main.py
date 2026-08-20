@@ -5,6 +5,8 @@
 - 같은 타겟이 3회 연속 읽기 실패하면 경고 + 스크린샷을 한 번만 보낸다.
 - 파서가 응답 구조를 해석 못 하면 가로챈 JSON을 텔레그램으로 보내 보정할 수 있게 한다.
 """
+import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -44,6 +46,18 @@ def check_target(browser, target, st) -> list[dict]:
         print(f"[{masked}] {date_str}: 확인 완료({result.method}) — "
               f"열린 시간 {len(result.slots)}개, 조건 일치 {len(wanted)}개")
 
+        # 진단 모드: 실행당 1회, 파서 판단 + 가로챈 JSON(있으면 전부)을 텔레그램으로 보낸다.
+        if os.environ.get("DEBUG_CAPTURE") and not check_target._dumped:
+            urls = "\n".join(f"- {u}" for u, _ in result.captured_json) or "(가로챈 JSON 없음)"
+            bodies = "\n\n".join(f"### {u}\n{b}" for u, b in result.captured_json)
+            blob = (f"타겟: {target['name']}\n날짜: {date_str}\n"
+                    f"읽은 방식: {result.method}\n"
+                    f"파서가 '열림'으로 판단한 슬롯: {result.slots}\n\n"
+                    f"가로챈 JSON 응답 목록:\n{urls}\n\n{bodies}")
+            notify.send_document("naver-response.txt", blob,
+                                 f"[진단] {target['name']} {date_str} · 방식={result.method}")
+            check_target._dumped = True
+
         group = state_mod.h(thash, date_str)
         prev_open = st["open"].get(group, {})
         now_open = {}
@@ -65,7 +79,8 @@ def check_target(browser, target, st) -> list[dict]:
             notify.send_message(
                 f"⚠️ <b>[{target['name']}]</b> 자리 정보를 읽지 못하고 있어요.\n"
                 f"연속 {entry['fail']}회 실패 (예: {date_str})\n"
-                f"URL이 맞는지 확인해주세요. 복구되면 자동으로 다시 감시합니다.",
+                f"사유: {result.error}\n"
+                f"복구되면 자동으로 다시 감시합니다.",
                 button_url=target["url"], button_text="문제 페이지 열어보기")
             if result.screenshot:
                 notify.send_photo(result.screenshot, f"[{target['name']}] 실패 시점 화면")
@@ -133,6 +148,7 @@ def main():
         sys.exit(1)
 
     print(f"[시작] 감시 대상 {len(targets)}개")
+    check_target._dumped = False  # 진단 덤프는 실행당 1회만
     st = state_mod.load()
 
     if targets:
@@ -150,4 +166,21 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # INTERVAL_SECONDS가 있으면(나스/도커 상주 모드) 그 간격으로 무한 반복하고,
+    # 없으면(GitHub Actions 등) 1회만 실행한다.
+    interval = os.environ.get("INTERVAL_SECONDS")
+    if interval:
+        interval = int(interval)
+        print(f"[상주 모드] {interval}초 간격으로 반복 실행합니다.")
+        while True:
+            started = time.time()
+            try:
+                main()
+            except (Exception, SystemExit) as e:
+                # 한 회차 실패가 루프를 죽이지 않도록 삼킨다.
+                print(f"[루프] 이번 회차 오류: {type(e).__name__}: {e}")
+            # 매번 정확히 같은 시각에 두드리지 않도록 0~2분 지터를 준다.
+            sleep_for = max(interval - (time.time() - started), 60) + random.uniform(0, 120)
+            time.sleep(sleep_for)
+    else:
+        main()
