@@ -46,6 +46,15 @@ def check_target(browser, target, st) -> list[dict]:
         print(f"[{masked}] {date_str}: 확인 완료({result.method}) — "
               f"열린 시간 {len(result.slots)}개, 조건 일치 {len(wanted)}개")
 
+        # 진단 모드: 성공 응답 원본 + 파서가 뽑은 슬롯을 실행당 1회 텔레그램으로 보낸다.
+        if os.environ.get("DEBUG_CAPTURE") and result.captured_json and not check_target._dumped:
+            blob = (f"타겟: {target['name']}\n날짜: {date_str}\n"
+                    f"파서가 '열림'으로 판단한 슬롯: {result.slots}\n\n"
+                    + "\n\n".join(f"### {u}\n{b}" for u, b in result.captured_json))
+            notify.send_document("naver-response.txt", blob,
+                                 f"[진단] {target['name']} {date_str} 네이버 응답 원본")
+            check_target._dumped = True
+
         group = state_mod.h(thash, date_str)
         prev_open = st["open"].get(group, {})
         now_open = {}
@@ -135,6 +144,7 @@ def main():
         sys.exit(1)
 
     print(f"[시작] 감시 대상 {len(targets)}개")
+    check_target._dumped = False  # 진단 덤프는 실행당 1회만
     st = state_mod.load()
 
     if targets:

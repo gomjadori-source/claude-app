@@ -140,6 +140,8 @@ def check_date(browser: Browser, base_url: str, date_str: str) -> CheckResult:
                 seen[t] = stock
         result.ok, result.method = True, "json"
         result.slots = sorted(seen.items())
+        # 진단용: 성공했을 때도 원본을 실어 보내 파서를 실제 구조에 맞게 보정한다.
+        result.captured_json = [(u, b[:15000]) for u, b in captured[:3]]
         page.close()
         return result
 
