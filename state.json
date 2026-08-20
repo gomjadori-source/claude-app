@@ -1,21 +1,4 @@
 {
- "open": {
-  "8c71fa1c381dfa83": {
-   "33ec147422b2cff8": 1787241168.2791579
-  }
- },
- "targets": {
-  "59f9875a1991409c": {
-   "debug_sent": false,
-   "fail": 0,
-   "fail_alerted": false,
-   "last_ok": 1787241168.2791598
-  },
-  "717198284bcc76d1": {
-   "debug_sent": false,
-   "fail": 1,
-   "fail_alerted": true,
-   "last_ok": 0
-  }
- }
+ "open": {},
+ "targets": {}
 }
