@@ -1,15 +1,13 @@
 {
  "open": {
-  "77cd84060f3f6785": {
-   "33c6e8a0b4b4345b": 1787201638.9878035
-  }
+  "77cd84060f3f6785": {}
  },
  "targets": {
   "59f9875a1991409c": {
    "debug_sent": false,
    "fail": 0,
    "fail_alerted": false,
-   "last_ok": 1787201638.9878063
+   "last_ok": 1787203970.691937
   },
   "717198284bcc76d1": {
    "debug_sent": false,
