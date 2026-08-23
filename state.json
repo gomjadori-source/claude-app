@@ -3,7 +3,7 @@
  "targets": {
   "59f9875a1991409c": {
    "debug_sent": false,
-   "fail": 20,
+   "fail": 21,
    "fail_alerted": true,
    "last_ok": 0
   }
