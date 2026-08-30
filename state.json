@@ -1,9 +1,10 @@
 {
+ "_heartbeat": "2026-08-30",
  "open": {},
  "targets": {
   "59f9875a1991409c": {
    "debug_sent": false,
-   "fail": 57,
+   "fail": 58,
    "fail_alerted": true,
    "last_ok": 0
   }
